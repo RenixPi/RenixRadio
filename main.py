@@ -15,29 +15,16 @@ except ImportError:
 else:
     logger.addHandler(journal.JournaldLogHandler())
 
-
-
-# speakers = sc.all_speakers()
-# print(speakers)
-# s = speakers[0]
-# print(s)
-#
-# mics = sc.all_microphones()
-# print(mics)
-# m0 = mics[0]
-# m1 = mics[1]
-# #print(m)
-
 SAMPLE_RATE = 48000
 BLOCK_SIZE = 512
 NUM_FRAMES = 256
 
 SPEAKER_NAME = "Speaker Built-in Audio Stereo"
 INPUT_NAME = "Microphone USB PnP Sound Device Multichannel"
-LOOPBACK_NAME = "loopback device"
+LOOPBACK_NAME = "OpenDshSink"
 
 MIN_PLAYING_COUNT = 500
-
+SILENCE = 0.01
 
 class Inputs(Enum):
     CHANNEL1 = 1
@@ -47,7 +34,7 @@ class Inputs(Enum):
 
 def is_silent(data):
     for d in data:
-        if abs(d) > 0.01:
+        if abs(d) > SILENCE:
             return False
     return True
 
@@ -61,6 +48,7 @@ def find_speaker_port(name):
         if r > 0.5 and pr > 0.5:
             return s
 
+    logger.warning("could not find speaker port '{}' : {} {}".format(name, r, pr))
     return False
 
 
@@ -68,11 +56,12 @@ def find_loopback_port():
 
     for m in sc.all_microphones(include_loopback=True):
         r = fuzz.ratio(LOOPBACK_NAME, m.name)
-        pr = fuzz.ratio(LOOPBACK_NAME, m.name)
+        pr = fuzz.ration(LOOPBACK_NAME, m.name)
 
         if r > 0.5 and pr > 0.5:
             return m
 
+    logger.warning("could not find loopback port: {} {}".format(r, pr))
     return None
 
 
@@ -80,46 +69,59 @@ def start_mixer():
 
     speaker = find_speaker_port(SPEAKER_NAME)
 
+    channel1 = None
+    channel2 = None
+
     mics = sc.all_microphones()
+
+    if len(mics) > 0:
+        channel1 = mics[0].recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        channel1.__enter__()
+
+    if len(mics) > 1:
+        channel2 = mics[1].recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        channel2.__enter__()
+
+    opendsh = None
+
     lb = find_loopback_port()
+    if lb:
+        opendsh = lb.recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        opendsh.__enter__()
 
-    with mics[0].recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE) as channel1, \
-            mics[1].recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE) as channel2, \
-            lb.recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE) as opendsh:
+    player = None
+    playing_count = 0
 
-        player = None
-        playing_count = 0
+    while True:
 
-        while True:
+        playing = None
 
-            playing = None
+        c1 = channel1.record(numframes=NUM_FRAMES)
+        c2 = channel2.record(numframes=NUM_FRAMES)
+        od = opendsh.record(numframes=NUM_FRAMES)
 
-            c1 = channel1.record(numframes=NUM_FRAMES)
-            c2 = channel2.record(numframes=NUM_FRAMES)
-            od = opendsh.record(numframes=NUM_FRAMES)
+        if player == Inputs.CHANNEL1 and playing_count < MIN_PLAYING_COUNT:
+            speaker.play(c1)
+        elif player == Inputs.CHANNEL2 and playing_count < MIN_PLAYING_COUNT:
+            speaker.play(c2)
+        elif player == Inputs.OPENDSH and playing_count < MIN_PLAYING_COUNT:
+            speaker.play(opendsh)
+        elif not is_silent(c1):
+            speaker.play(c1)
+            playing = Inputs.CHANNEL1
+        elif not is_silent(c2):
+            speaker.play(c2)
+            playing = Inputs.CHANNEL2
+        else:
+            speaker.play(od)
+            playing = Inputs.OPENDSH
 
-            if player == Inputs.CHANNEL1 and playing_count < MIN_PLAYING_COUNT:
-                speaker.play(c1)
-            elif player == Inputs.CHANNEL2 and playing_count < MIN_PLAYING_COUNT:
-                speaker.play(c2)
-            elif player == Inputs.OPENDSH and playing_count < MIN_PLAYING_COUNT:
-                speaker.play(opendsh)
-            elif not is_silent(c1):
-                speaker.play(c1)
-                playing = Inputs.CHANNEL1
-            elif not is_silent(c2):
-                speaker.play(c2)
-                playing = Inputs.CHANNEL2
-            else:
-                speaker.play(od)
-                playing = Inputs.OPENDSH
-
-            if playing != player:
-                logger.debug("switching to player: {}".format(playing))
-                player = playing
-                playing_count = 0
-            else:
-                playing_count += 1
+        if playing != player:
+            logger.debug("switching to player: {}".format(playing))
+            player = playing
+            playing_count = 0
+        else:
+            playing_count += 1
 
 
 
