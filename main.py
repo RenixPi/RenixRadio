@@ -15,29 +15,16 @@ except ImportError:
 else:
     logger.addHandler(journal.JournaldLogHandler())
 
-
-
-# speakers = sc.all_speakers()
-# print(speakers)
-# s = speakers[0]
-# print(s)
-#
-# mics = sc.all_microphones()
-# print(mics)
-# m0 = mics[0]
-# m1 = mics[1]
-# #print(m)
-
 SAMPLE_RATE = 48000
 BLOCK_SIZE = 512
 NUM_FRAMES = 256
 
 SPEAKER_NAME = "Speaker Built-in Audio Stereo"
 INPUT_NAME = "Microphone USB PnP Sound Device Multichannel"
-LOOPBACK_NAME = "loopback device"
+LOOPBACK_NAME = "OpenDshSink"
 
 MIN_PLAYING_COUNT = 500
-
+SILENCE = 0.01
 
 class Inputs(Enum):
     CHANNEL1 = 1
@@ -47,7 +34,7 @@ class Inputs(Enum):
 
 def is_silent(data):
     for d in data:
-        if abs(d) > 0.01:
+        if abs(d) > SILENCE:
             return False
     return True
 
@@ -61,6 +48,7 @@ def find_speaker_port(name):
         if r > 0.5 and pr > 0.5:
             return s
 
+    logger.warning("could not find speaker port '{}' : {} {}".format(name, r, pr))
     return False
 
 
@@ -73,6 +61,7 @@ def find_loopback_port():
         if r > 0.5 and pr > 0.5:
             return m
 
+    logger.warning("could not find loopback port: {} {}".format(r, pr))
     return None
 
 
@@ -87,15 +76,18 @@ def start_mixer():
 
     if len(mics) > 0:
         channel1 = mics[0].recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        channel1.__enter__()
 
     if len(mics) > 1:
         channel2 = mics[1].recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        channel2.__enter__()
 
     opendsh = None
 
     lb = find_loopback_port()
     if lb:
         opendsh = lb.recorder(samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        opendsh.__enter__()
 
     player = None
     playing_count = 0
