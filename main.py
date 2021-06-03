@@ -103,12 +103,15 @@ def start_mixer():
         if player == Inputs.CHANNEL1 and playing_count < MIN_PLAYING_COUNT:
             output1.play(i1)
             output2.play(i1)
+            playing = Inputs.CHANNEL1
         elif player == Inputs.CHANNEL2 and playing_count < MIN_PLAYING_COUNT:
             output1.play(i2)
             output2.play(i2)
+            playing = Inputs.CHANNEL2
         elif player == Inputs.OPENDSH and playing_count < MIN_PLAYING_COUNT:
             output1.play(od)
             output2.play(od)
+            playing = Inputs.OPENDSH
         elif not is_silent(i1):
             output1.play(i1)
             output2.play(i1)
