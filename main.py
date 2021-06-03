@@ -18,10 +18,11 @@ SAMPLE_RATE = 48000
 BLOCK_SIZE = 512
 NUM_FRAMES = 256
 
-SPEAKER_NAME = "USB PnP Sound Device Multichannel"
-INPUT_NAME = "Microphone USB PnP Sound Device Multichannel"
-LOOPBACK_NAME = "OpenDshSink"
+SPEAKER_NAME = "Speaker USB PnP Sound Device"
+INPUT_NAME = "Microphone USB PnP Sound Device"
+LOOPBACK_NAME = "Loopback Monitor of Null Output"
 
+FUZZ_MATCHING = 50
 MIN_PLAYING_COUNT = 500
 SILENCE = 0.01
 
@@ -39,25 +40,25 @@ def is_silent(data):
     return True
 
 
-def speaker_name_matcher(name):
-    r = fuzz.ratio(SPEAKER_NAME, name)
-    pr = fuzz.partial_ratio(SPEAKER_NAME, name)
-    return r > 0.5 and pr > 0.5
+def speaker_name_matcher(spkr):
+    r = fuzz.ratio(SPEAKER_NAME, spkr.name)
+    pr = fuzz.partial_ratio(SPEAKER_NAME, spkr.name)
+    return r > FUZZ_MATCHING and pr > FUZZ_MATCHING
 
 
-def mic_name_matcher(name):
-    r = fuzz.ratio(INPUT_NAME, name)
-    pr = fuzz.partial_ratio(INPUT_NAME, name)
-    return r > 0.5 and pr > 0.5
+def mic_name_matcher(mic):
+    r = fuzz.ratio(INPUT_NAME, mic.name)
+    pr = fuzz.partial_ratio(INPUT_NAME, mic.name)
+    return r > FUZZ_MATCHING and pr > FUZZ_MATCHING
 
 
 def find_loopback_port():
     r, pr = 0.0, 0.0
     for m in sc.all_microphones(include_loopback=True):
         r = fuzz.ratio(LOOPBACK_NAME, m.name)
-        pr = fuzz.ration(LOOPBACK_NAME, m.name)
-
-        if r > 0.5 and pr > 0.5:
+        pr = fuzz.ratio(LOOPBACK_NAME, m.name)
+        print("{} : {} {}".format(m.name, r, pr))
+        if r > FUZZ_MATCHING and pr > FUZZ_MATCHING:
             return m
 
     logger.warning("could not find loopback port: {} {}".format(r, pr))
@@ -83,7 +84,10 @@ def start_mixer():
     opendsh.__enter__()
 
     output1 = spkr1.player(samplerate=SAMPLE_RATE)
+    output1.__enter__()
+
     output2 = spkr2.player(samplerate=SAMPLE_RATE)
+    output2.__enter__()
 
     player = None
     playing_count = 0
@@ -113,12 +117,10 @@ def start_mixer():
             output1.play(i2)
             output2.play(i2)
             playing = Inputs.CHANNEL2
-        elif od:
+        else:
             output1.play(od)
             output2.play(od)
             playing = Inputs.OPENDSH
-        else:
-            playing = None
 
         if playing != player:
             logger.debug("switching to player: {}".format(playing))
@@ -127,7 +129,8 @@ def start_mixer():
         else:
             playing_count += 1
 
-
-if __name__ == "main":
+print(__name__)
+print(__file__)
+if __name__ == "__main__":
 
     start_mixer()
