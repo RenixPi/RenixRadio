@@ -5,6 +5,7 @@ import soundcard as sc
 import logging
 import numpy
 from prometheus_client import start_http_server, Gauge, REGISTRY
+from contextlib import suppress
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
@@ -29,7 +30,13 @@ SPEAKER_NAME = "Audio Adapter (Unitek Y-247A) Digital Stereo (IEC958)"
 MIC_NAME = "USB PnP Sound Device"
 LOOPBACK_NAME = "Loopback Monitor of Null Output"
 
-levels = Gauge('tire_pressure', 'Tire pressure', ['channel', ])
+# for name in list(REGISTRY._names_to_collectors.values()):
+#     with suppress(KeyError):
+#         REGISTRY.unregister(name)
+
+levels = Gauge('channel_strength', 'Channel Strength', ['channel', ])
+
+
 
 
 class Inputs(Enum):
@@ -63,6 +70,7 @@ def mic_name_matcher(mic):
 def loopback_name_matcher(lb):
     r = fuzz.ratio(LOOPBACK_NAME, lb.name)
     pr = fuzz.partial_ratio(LOOPBACK_NAME, lb.name)
+    logging.debug("{} : {} {}".format(lb.name, r, pr))
     return r > FUZZ_MATCHING and pr > FUZZ_MATCHING
 
 
@@ -99,10 +107,10 @@ def start_mixer():
         i2 = input2.record(numframes=NUMFRAMES)
         od = opendsh.record(numframes=NUMFRAMES)
 
-        if player == Inputs.CHANNEL1 and playing_count > MIN_PLAYING_COUNT:
+        if player == Inputs.CHANNEL1 and playing_count < MIN_PLAYING_COUNT:
             output1.play(i1)
             playing = Inputs.CHANNEL1
-        elif player == Inputs.CHANNEL2 and playing_count > MIN_PLAYING_COUNT:
+        elif player == Inputs.CHANNEL2 and playing_count < MIN_PLAYING_COUNT:
             output1.play(i2)
             playing = Inputs.CHANNEL2
 
