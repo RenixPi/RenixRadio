@@ -3,12 +3,27 @@ import RPi.GPIO as GPIO
 from time import sleep
 import i2cEncoderLibV2
 from colour import Color
+import logging
+import websocket
+import json
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
+
+try:
+    from systemd import journal
+except ImportError:
+    pass
+else:
+    logger.addHandler(journal.JournaldLogHandler())
 
 blue = Color("blue")
 red = Color("red")
 blue_red = list(blue.range_to(red, 101))
-print(list(blue_red))
+#print(list(blue_red))
 
+global ws
+ws = None
 
 def EncoderChange():
     value = round(encoder.readCounter32())
@@ -17,33 +32,39 @@ def EncoderChange():
     encoder.writeLEDB(round(color.blue * 100))
     encoder.writeLEDR(round(color.red * 100))
 
+    global ws
+
+    if not ws:
+        ws = websocket.WebSocket()
+        ws.connect("ws://127.0.0.1:54545/state")
+    ws.send(json.dumps({'volume':value}))
 
     #encoder.writeRGBCode(blue_red[value].hex)
 
     #encoder.writeLEDG(100)
-    print ('Changed: %d' % (encoder.readCounter32()))
+    logger.debug('Changed: %d' % (encoder.readCounter32()))
     #encoder.writeLEDG(0)
 
 def EncoderPush():
 #    encoder.writeLEDB(100)
-    print ('Encoder Pushed!')
+    logger.debug('Encoder Pushed!')
 #    encoder.writeLEDB(0)
 
 def EncoderDoublePush():
 #    encoder.writeLEDB(100)
 #    encoder.writeLEDG(100)
-    print ('Encoder Double Push!')
+    logger.debug('Encoder Double Push!')
 #    encoder.writeLEDB(0)
 #    encoder.writeLEDG(0)
 
 def EncoderMax():
 #    encoder.writeLEDR(100)
-    print ('Encoder max!')
+    logger.debug('Encoder max!')
 #    encoder.writeLEDR(0)
 
 def EncoderMin():
 #    encoder.writeLEDR(100)
-    print ('Encoder min!')
+    logger.debug('Encoder min!')
 #    encoder.writeLEDR(0)
 
 def Encoder_INT(self):
