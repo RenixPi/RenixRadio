@@ -1,13 +1,65 @@
 import smbus2
+import websocket
+import json
+import time
 import RPi.GPIO as GPIO
 from time import sleep
 import i2cEncoderLibV2
 from colour import Color
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
+
+try:
+    from systemd import journal
+except ImportError:
+    pass
+else:
+    logger.addHandler(journal.JournaldLogHandler())
+
+global isconnected
+global websocket
+
+isconnected = False
+ws  = None
 
 blue = Color("blue")
 red = Color("red")
 blue_red = list(blue.range_to(red, 101))
-print(list(blue_red))
+
+def on_message(ws, message):
+    logger.debug(message)
+
+def on_error(ws, error):
+    logger.error(error)
+
+def on_close(ws, close_status_code, close_msg):
+    logger.info("### closed ###")
+    isconnected = False
+
+def on_open(ws):
+    ws = ws
+    logger.info("### open ###")
+    isconnected = True
+    logger.info("connected? {}".format(isconnected))
+
+def set_volume(value):
+    if not ws:
+       logger.info("socket not available")
+       return
+
+    ws.send(json.dumps({"volume": value}))
+
+#def ws_connect():
+#    # websocket.enableTrace(True)
+#    websocket.WebSocketApp("ws://127.0.0.1:54545/state",
+#                              on_open=on_open,
+#                              on_message=on_message,
+#                              on_error=on_error,
+#                              on_close=on_close)
+    #ws.run_forever()
+
 
 
 def EncoderChange():
@@ -17,38 +69,40 @@ def EncoderChange():
     encoder.writeLEDB(round(color.blue * 100))
     encoder.writeLEDR(round(color.red * 100))
 
+    set_volume(value)
 
     #encoder.writeRGBCode(blue_red[value].hex)
 
     #encoder.writeLEDG(100)
-    print ('Changed: %d' % (encoder.readCounter32()))
+    logger.debug('Changed: %d' % (encoder.readCounter32()))
     #encoder.writeLEDG(0)
 
 def EncoderPush():
 #    encoder.writeLEDB(100)
-    print ('Encoder Pushed!')
+    logger.debug('Encoder Pushed!')
 #    encoder.writeLEDB(0)
 
 def EncoderDoublePush():
 #    encoder.writeLEDB(100)
 #    encoder.writeLEDG(100)
-    print ('Encoder Double Push!')
+    logger.debug('Encoder Double Push!')
 #    encoder.writeLEDB(0)
 #    encoder.writeLEDG(0)
 
 def EncoderMax():
 #    encoder.writeLEDR(100)
-    print ('Encoder max!')
+    logger.debug('Encoder max!')
 #    encoder.writeLEDR(0)
 
 def EncoderMin():
 #    encoder.writeLEDR(100)
-    print ('Encoder min!')
+    logger.debug('Encoder min!')
 #    encoder.writeLEDR(0)
 
-def Encoder_INT(self):
+def Encoder_INT():
     encoder.updateStatus()
-
+#    GPIO.remove_event_detect(INT_pin)
+#    GPIO.add_event_detect(INT_pin, GPIO.FALLING, callback=lambda x=ws: Encoder_INT(x), bouncetime=10)
 
 GPIO.setmode(GPIO.BCM)
 bus = smbus2.SMBus(1)
@@ -90,9 +144,20 @@ encoder.writeRGBCode(0x000064)
 sleep(0.3)
 encoder.writeRGBCode(0x00)
 
-GPIO.add_event_detect(INT_pin, GPIO.FALLING, callback=Encoder_INT, bouncetime=10)
+GPIO.add_event_detect(INT_pin, GPIO.FALLING, callback=lambda x=ws: Encoder_INT(x), bouncetime=10)
 
-while True:
-  #  if GPIO.input(INT_pin) == False: #
-   #     Encoder_INT() #
-    pass
+ws = websocket.WebSocketApp("ws://127.0.0.1:54545/state",
+                              on_open=on_open,
+#                              on_message=on_message,
+                              on_error=on_error,
+                              on_close=on_close)
+
+logger.info("running forever")
+ws.run_forever()
+
+logger.info("no longer running")
+
+#while True:
+#  if GPIO.input(INT_pin) == False: #
+#    Encoder_INT() #
+#    pass
