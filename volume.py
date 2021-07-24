@@ -6,9 +6,15 @@ from colour import Color
 import logging
 import websocket
 import json
+import pickledb
+
+db = pickledb.load(".volume.db", True)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
+
+if not db.get('current'):
+    db.set('current', 0)
 
 try:
     from systemd import journal
@@ -20,32 +26,33 @@ else:
 blue = Color("blue")
 red = Color("red")
 blue_red = list(blue.range_to(red, 101))
-#print(list(blue_red))
 
-global ws
 ws = None
 
 def EncoderChange():
     value = round(encoder.readCounter32())
+    SetVolume(value)
+
+def SetVolume(value, write=True):
     color = blue_red[value]
     encoder.writeLEDG(round(color.green * 100))
     encoder.writeLEDB(round(color.blue * 100))
     encoder.writeLEDR(round(color.red * 100))
-
-    ws = websocket.WebSocket()
-    ws.connect("ws://127.0.0.1:54545/state")
+    global ws
+    global db
+    if not ws or not ws.connected:
+        ws = websocket.WebSocket()
+        ws.connect("ws://127.0.0.1:54545/state")
     ws.send(json.dumps({'volume':value}))
-    ws.close()
-
-    #encoder.writeRGBCode(blue_red[value].hex)
-
-    #encoder.writeLEDG(100)
+    if write:
+        db.set('current', value)
     logger.debug('Changed: %d' % (encoder.readCounter32()))
-    #encoder.writeLEDG(0)
 
 def EncoderPush():
 #    encoder.writeLEDB(100)
     logger.debug('Encoder Pushed!')
+    SetVolume(0, False)
+
 #    encoder.writeLEDB(0)
 
 def EncoderDoublePush():
@@ -54,6 +61,10 @@ def EncoderDoublePush():
     logger.debug('Encoder Double Push!')
 #    encoder.writeLEDB(0)
 #    encoder.writeLEDG(0)
+    global db
+    value = db.get('current')
+    SetVolume(value)
+
 
 def EncoderMax():
 #    encoder.writeLEDR(100)
@@ -108,6 +119,9 @@ sleep(0.3)
 encoder.writeRGBCode(0x000064)
 sleep(0.3)
 encoder.writeRGBCode(0x00)
+
+SetVolume(db.get('current'))
+
 
 GPIO.add_event_detect(INT_pin, GPIO.FALLING, callback=Encoder_INT, bouncetime=10)
 
