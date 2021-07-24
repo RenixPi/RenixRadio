@@ -7,7 +7,7 @@ import logging
 import websocket
 import json
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
 try:
@@ -32,12 +32,10 @@ def EncoderChange():
     encoder.writeLEDB(round(color.blue * 100))
     encoder.writeLEDR(round(color.red * 100))
 
-    global ws
-
-    if not ws:
-        ws = websocket.WebSocket()
-        ws.connect("ws://127.0.0.1:54545/state")
+    ws = websocket.WebSocket()
+    ws.connect("ws://127.0.0.1:54545/state")
     ws.send(json.dumps({'volume':value}))
+    ws.close()
 
     #encoder.writeRGBCode(blue_red[value].hex)
 
